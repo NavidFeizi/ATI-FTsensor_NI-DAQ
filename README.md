@@ -8,5 +8,7 @@ To use this library, you will need the following:
 - The NI-DAQmx driver installed on your system
 - The ATI force/torque sensor connected to the NI-DAQ card
 
-The calibration file (.cal) needs to be replaced with the correct file according to the sensor's model.
+Please note:
+* The calibration file (.cal) needs to be replaced with the correct file according to the sensor's model.
+* The channel number may need to be changed based on the physical channel used. For example, to Dev0 ot Dev1 or Dev2.
 
