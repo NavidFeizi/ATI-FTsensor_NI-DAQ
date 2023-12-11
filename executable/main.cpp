@@ -44,20 +44,19 @@ int main()
 
 	/* open recording file */
 	std::ofstream file;
-	file.open("../../Recordings.txt");
+	file.open("../../Output.csv");
 
 	/* initialize ATI FT */
 	std::string physicalChannel = "dev1/ai0:6";
 	std::string clibration_filename = "FT35366.cal";
-
-	// char calAddress[40] = {"../../lib_ati/config/FT35366.cal"};
 	std::string forecUnit = "N";
 	std::string torqueUnit = "N-mm";
 	AtiSensor AtiFT(physicalChannel, clibration_filename, forecUnit, torqueUnit);
 
 	AtiFT.NullOffsets();
 
-	file << "target" << ',' << "pos_abs" << ',' << "velocity" << ',' << "current" << ',' << "Fx" << ',' << "Fy" << ',' << "Fz" << '\n';
+	file << "Fx" << ',' << "Fy" << ',' << "Fz"
+		 << "Tx" << ',' << "Ty" << ',' << "Tz" << '\n';
 
 	double t = 0;
 	auto t0 = std::chrono::high_resolution_clock::now();
@@ -65,7 +64,12 @@ int main()
 	for (int i = 0; i < 10000; i++)
 	{
 		AtiFT.GetForceUnBias(force_reading);
-		file << force_reading[0] << ',' << force_reading[1] << ',' << force_reading[2] << '\n';
+		file << force_reading[0] << ','
+			 << force_reading[1] << ','
+			 << force_reading[2] << ','
+			 << force_reading[3] << ','
+			 << force_reading[4] << ','
+			 << force_reading[5] << '\n';
 
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - t0);
@@ -97,7 +101,8 @@ void print_FT(double t, blaze::StaticVector<double, 6> FT_reading)
 		}
 	};
 
-	std::cout << "\r" << std::dec << std::fixed << std::setprecision(2) << "Time: " << t << " [s]"  << "    ";
+	std::cout << "\r" << std::dec << std::fixed << std::setprecision(2) << "Time: " << t << " [s]"
+			  << "    ";
 
 	std::cout << "Fx: ";
 	std::cout << std::fixed << std::setprecision(5);
@@ -127,5 +132,5 @@ void print_FT(double t, blaze::StaticVector<double, 6> FT_reading)
 	std::cout << " \n";
 
 	// std::cout << "\r"
-			//   << "----------------------------------------------------------------------------------" << std::endl;
+	//   << "----------------------------------------------------------------------------------" << std::endl;
 }
