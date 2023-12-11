@@ -12,7 +12,7 @@
 //==========================================================================================================
 
 #include "ATI_FT.hpp"
-#include <signal.h>
+// #include <signal.h>
 #include <random>
 
 #ifdef _WINDOWS
@@ -47,23 +47,23 @@ int main()
 	file.open("../../Output.csv");
 
 	/* initialize ATI FT */
-	std::string physicalChannel = "dev1/ai0:6";
-	std::string clibration_filename = "FT35366.cal";
-	std::string forecUnit = "N";
+	std::string channel = "dev1/ai0:6";
+	std::string calibration_filename = "FT35366.cal";
+	std::string forceUnit = "N";
 	std::string torqueUnit = "N-mm";
-	AtiSensor AtiFT(physicalChannel, clibration_filename, forecUnit, torqueUnit);
-
-	AtiFT.NullOffsets();
+	AtiSensor AtiFT(channel, calibration_filename, forceUnit, torqueUnit);
 
 	file << "Fx" << ',' << "Fy" << ',' << "Fz"
 		 << "Tx" << ',' << "Ty" << ',' << "Tz" << '\n';
 
+	AtiFT.initialize();
+	AtiFT.Start_Read_Thread();
+
 	double t = 0;
 	auto t0 = std::chrono::high_resolution_clock::now();
-
 	for (int i = 0; i < 10000; i++)
 	{
-		AtiFT.GetForceUnBias(force_reading);
+		AtiFT.GetForce(force_reading);
 		file << force_reading[0] << ','
 			 << force_reading[1] << ','
 			 << force_reading[2] << ','

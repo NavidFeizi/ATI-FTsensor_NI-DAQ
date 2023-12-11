@@ -25,6 +25,26 @@ AtiSensor::AtiSensor(std::string channel, std::string calibration_filename, std:
 	// std::string calibration_filename = "FT35366.cal";
 
 	std::string address = Calibration_Files_Dir + calibration_filename;
+	this->address_cal = new char[address.length() + 1];
+	this->physical_channel = new char[channel.length() + 1];
+	this->unit_force = new char[forceUnit.length() + 1];
+	this->unit_torque = new char[torqueUnit.length() + 1];
+
+	strcpy(this->address_cal, address.c_str());
+	strcpy(this->physical_channel, channel.c_str());
+	strcpy(this->unit_force, forceUnit.c_str());
+	strcpy(this->unit_torque, torqueUnit.c_str());
+}
+
+/* Default constructor*/
+AtiSensor::AtiSensor()
+{
+	std::string channel = "dev1/ai0:6";
+	std::string calibration_filename = "FT35366.cal";
+	std::string forceUnit = "N";
+	std::string torqueUnit = "N-mm";
+
+	std::string address = Calibration_Files_Dir + calibration_filename;
 	char *address_cal = new char[address.length() + 1];
 	char *physical_channel = new char[channel.length() + 1];
 	char *unit_force = new char[forceUnit.length() + 1];
@@ -39,10 +59,54 @@ AtiSensor::AtiSensor(std::string channel, std::string calibration_filename, std:
 	this->initialize_ATI_forcesensor(address_cal, unit_force, unit_torque);
 }
 
+/* Copy constructor */
+AtiSensor::AtiSensor(const AtiSensor &rhs)
+{
+	// handling self assignment
+	if (this != &rhs)
+	{
+		this->taskHandle = rhs.taskHandle;
+		this->cal = rhs.cal;
+		this->bias = rhs.bias;
+		this->force_unbiased = rhs.force_unbiased;
+		this->address_cal = rhs.address_cal;
+		this->physical_channel = rhs.physical_channel;
+		this->unit_force = rhs.unit_force;
+		this->unit_torque = rhs.unit_torque;
+	}
+};
+
+/* move constructor */
+AtiSensor::AtiSensor(AtiSensor &&rhs) noexcept
+{
+	// handling self assignment
+	if (this != &rhs)
+	{
+		this->taskHandle = std::move(rhs.taskHandle);
+		this->cal = std::move(rhs.cal);
+		this->bias = std::move(rhs.bias);
+		this->force_unbiased = std::move(rhs.force_unbiased);
+		this->address_cal = std::move(rhs.address_cal);
+		this->physical_channel = std::move(rhs.physical_channel);
+		this->unit_force = std::move(rhs.unit_force);
+		this->unit_torque = std::move(rhs.unit_torque);
+	}
+}
+
 /* class destructor: */
 AtiSensor::~AtiSensor()
 {
 	std::cout << "ATI FT Closing...!!" << std::endl;
+}
+
+/** initilize */
+void AtiSensor::initialize()
+{
+	AtiSensor::initialize_NIcard(this->physical_channel);
+	AtiSensor::initialize_ATI_forcesensor(this->address_cal,
+										  this->unit_force,
+										  this->unit_torque);
+	AtiSensor::NullOffsets(this->bias);
 }
 
 /** initilize NI DAQ and set physical channels and max voltages
@@ -76,27 +140,51 @@ int AtiSensor::initialize_ATI_forcesensor(char *address_cal, char *unit_force, c
 	return 1;
 }
 
-/** get unbiased force and torque
-	@param forceUB_reading: Fx, Fy, Fz, Tx, Ty, Tz	*/
-void AtiSensor::GetForceUnBias(blaze::StaticVector<double, 6> &forceUB_reading)
+/** @brief Call AtiSensor::Read_Loop() from a separate thread to avoid blocking the program. */
+void AtiSensor::Start_Read_Thread()
 {
-	blaze::StaticVector<double, 6> force_reading;
-	this->GetForceBias(force_reading);
+	emThread = std::thread(&AtiSensor::Read_Loop, this);
+}
+
+/** @brief Read sensor data, does the conversions, and stores the last reading*/
+void AtiSensor::Read_Loop()
+{
+	while (true)
+	{
+		blaze::StaticVector<double, 6> force;
+		blaze::StaticVector<double, 6> force_ub;
+		AtiSensor::ReadForce(force);
+		AtiSensor::UnBias(force, bias, force_ub);
+		this->force_unbiased = force_ub;
+	}
+}
+
+/** get the last unbiased value
+	@param force_reading: Fx, Fy, Fz, Tx, Ty, Tz	*/
+void AtiSensor::GetForce(blaze::StaticVector<double, 6> &force_reading)
+{
+	force_reading = this->force_unbiased;
+}
+
+/** unbias the radings
+	@param forceUB_reading: Fx, Fy, Fz, Tx, Ty, Tz	*/
+void AtiSensor::UnBias(blaze::StaticVector<double, 6> &force_reading, blaze::StaticVector<double, 6> &bias, blaze::StaticVector<double, 6> &forceUB_reading)
+{
 	for (int i = 0; i < 6; i++)
 	{
-		forceUB_reading[i] = force_reading[i] - this->bias[i];
+		forceUB_reading[i] = force_reading[i] - bias[i];
 		// ati_force[i] = (ati_force[i] + dt*w_cutoff_force*force_unbias[i]) / (1 + w_cutoff_force*dt);
 	}
 }
 
-/** get biased force and toruqe
+/** read biased force and toruqe from the sesnor
 	@param force_reading: Fx, Fy, Fz, Tx, Ty, Tz	*/
-void AtiSensor::GetForceBias(blaze::StaticVector<double, 6> &force_reading)
+void AtiSensor::ReadForce(blaze::StaticVector<double, 6> &force_reading)
 {
 	float voltage[7]; // This array will hold the resultant force/torque vector.
 	float force[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
-	GetVoltage(voltage);
+	ReadVoltage(voltage);
 	ConvertToFT(this->cal, voltage, force); // convert voltage to force & torque
 	for (int i = 0; i < 6; i++)
 	{
@@ -107,8 +195,8 @@ void AtiSensor::GetForceBias(blaze::StaticVector<double, 6> &force_reading)
 	// std::cout << "Fx: " << force_reading[0] << "   Fy: " << force_reading[1] << "   Fz: " << force_reading[2] << "   Tx: " << force_reading[3] << "   Ty: " << force_reading[4] << "   Tz: " << force_reading[5] << std::endl;
 }
 
-/** get gage voltage from the NI DAQcard */
-void AtiSensor::GetVoltage(float *voltage_reading)
+/** get gauge voltage from the NI DAQcard */
+void AtiSensor::ReadVoltage(float *voltage_reading)
 {
 	float64 value[7];
 	int32 no_bytes_ni;
@@ -120,7 +208,7 @@ void AtiSensor::GetVoltage(float *voltage_reading)
 
 /* calcualted the offsets and update it.
 	This function should be called one time before data recording for proper offset cancelation using GetForceUnBias method */
-void AtiSensor::NullOffsets()
+void AtiSensor::NullOffsets(blaze::StaticVector<double, 6> &bias)
 {
 	int numRecords = 100;
 	int N_total[] = {0, 0, 0, 0, 0, 0};
@@ -129,7 +217,7 @@ void AtiSensor::NullOffsets()
 
 	for (int i = 0; i < numRecords; i++)
 	{
-		this->GetForceBias(force_reading);
+		AtiSensor::ReadForce(force_reading);
 		for (int j = 0; j < 6; j++)
 		{
 			if (force_reading[j] < 10000 && force_reading[j] > -10000)
@@ -142,7 +230,7 @@ void AtiSensor::NullOffsets()
 	}
 
 	for (int j = 0; j < 6; j++)
-		this->bias[j] = bias_temp[j] / N_total[j];
+		bias[j] = bias_temp[j] / N_total[j];
 }
 
 /* close NI DAQ card */
