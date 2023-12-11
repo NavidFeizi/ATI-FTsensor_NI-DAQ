@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/Catheter_Robot.dir/main.cpp.o -o ../bin/Catheter_Robot  -Wl,-rpath,/home/navid/Documents/ATI_FT/lib ../lib/libATIlib.so /usr/lib/x86_64-linux-gnu/libnidaqmx.so 
